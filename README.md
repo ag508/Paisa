@@ -1,4 +1,4 @@
-# Paisa — a quiet place for your expenses
+# Paisa - a quiet place for your expenses
 
 A minimal, animated personal-expense tracker. Full-stack in spirit, single-origin
 in reality: the "API" runs in the browser so the whole thing can be served as
@@ -19,7 +19,7 @@ static files from **GitHub Pages**.
 ```bash
 npm install
 npm run dev       # http://localhost:5173
-npm test          # unit tests (Vitest) — 12 specs
+npm test          # unit tests (Vitest) - 12 specs
 npm run build     # static bundle in dist/
 ```
 
@@ -63,7 +63,7 @@ interface Expense {
 ### Idempotency
 
 `POST /expenses` requires a client-generated key. A repeated call with the same
-key returns the **originally created** record — the check and insert happen
+key returns the **originally created** record - the check and insert happen
 inside a single IndexedDB transaction, so concurrent retries cannot both win.
 This protects against: double-click submits, reloads mid-submit, TanStack Query
 mutation retries, and user-triggered manual retries after a failure banner.
@@ -189,10 +189,10 @@ cannot occur.
 
 - Authentication / sync across devices.
 - Edit / update endpoint (delete + re-enter is the interim answer).
-- Pagination — not needed at the scale of a personal tracker.
-- Currency other than INR — the UI formats with `₹`; switching is a one-line
+- Pagination - not needed at the scale of a personal tracker.
+- Currency other than INR - the UI formats with `₹`; switching is a one-line
   change in `money.ts`.
-- E2E tests — the unit tests focus on the non-obvious parts (money arithmetic
+- E2E tests - the unit tests focus on the non-obvious parts (money arithmetic
   and idempotency race behaviour), which is where correctness lives.
 - A real HTTP server. The function signatures are HTTP-shaped on purpose so
   an Express/Fastify adapter is a small follow-up if someone needs `curl`
@@ -204,8 +204,8 @@ cannot occur.
 npm test
 ```
 
-- `money.test.ts` — parsing, formatting, integer sums.
-- `api/client.test.ts` — idempotency (replay, distinct keys, concurrent race),
+- `money.test.ts` - parsing, formatting, integer sums.
+- `api/client.test.ts` - idempotency (replay, distinct keys, concurrent race),
   validation errors, list filter + sort, delete + idempotency cleanup,
   reset.
 
