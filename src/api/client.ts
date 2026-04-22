@@ -107,7 +107,25 @@ export async function createExpense(
     const existing = await conn.idempotency.get(opts.idempotencyKey);
     if (existing) {
       const prior = await conn.expenses.get(existing.expenseId);
-      if (prior) return prior; // original response replayed
+      if (prior) {
+        // The key has been used before. If the body matches, replay the
+        // original response. If it doesn't match, the client has reused a
+        // key for a *different* request — almost certainly a bug on the
+        // caller's side. Surface a 409 so it is caught instead of silently
+        // returning an unrelated record. (Stripe's idempotency spec.)
+        const bodyMatches =
+          prior.amount === input.amount &&
+          prior.category === input.category &&
+          prior.description === input.description &&
+          prior.date === input.date;
+        if (!bodyMatches) {
+          throw new ApiError(
+            'Idempotency-Key reused with a different request body',
+            409,
+          );
+        }
+        return prior;
+      }
     }
     const now = new Date().toISOString();
     const record: Expense = {
@@ -163,10 +181,14 @@ export async function listExpenses(
   if (!opts.skipNetwork) await simulateNetwork();
   const conn = opts.database ?? db;
 
-  let results = await conn.expenses.toArray();
-  if (query.category && query.category !== 'All') {
-    results = results.filter((e) => e.category === query.category);
-  }
+  // Use the `category` index when filtering so we never load rows we are
+  // about to discard. This matters vanishingly little at personal scale
+  // but the intent of the schema is to be load-proportional to the result
+  // set, not the whole table.
+  const results =
+    query.category && query.category !== 'All'
+      ? await conn.expenses.where('category').equals(query.category).toArray()
+      : await conn.expenses.toArray();
   const sort = query.sort ?? 'date_desc';
   results.sort((a, b) => {
     // Primary: date. Secondary: created_at, so same-day entries keep a stable,

@@ -7,7 +7,8 @@ export type Paise = number;
 /** Parse a user-entered rupee string ("1,234.56", "1234", "₹12.5") to paise. */
 export function parseRupeesToPaise(input: string): Paise {
   const cleaned = input.replace(/[₹,\s]/g, '').trim();
-  if (!/^-?\d+(\.\d{1,2})?$/.test(cleaned)) {
+  // Accept 1234, 1234.5, 1234.56, and .56 — but not "." or "1.234".
+  if (!/^-?(\d+(\.\d{1,2})?|\.\d{1,2})$/.test(cleaned)) {
     throw new Error('Enter an amount like 1234 or 1234.56');
   }
   const [whole, frac = ''] = cleaned.split('.');

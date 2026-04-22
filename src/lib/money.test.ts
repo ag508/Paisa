@@ -8,12 +8,16 @@ describe('money', () => {
     expect(parseRupeesToPaise('1234.56')).toBe(123456);
     expect(parseRupeesToPaise('0.01')).toBe(1);
     expect(parseRupeesToPaise('₹1,234.56')).toBe(123456);
+    expect(parseRupeesToPaise('.50')).toBe(50);
+    expect(parseRupeesToPaise('-.50')).toBe(-50);
   });
 
   it('rejects malformed input', () => {
     expect(() => parseRupeesToPaise('abc')).toThrow();
     expect(() => parseRupeesToPaise('1.234')).toThrow(); // 3 decimal places
     expect(() => parseRupeesToPaise('')).toThrow();
+    expect(() => parseRupeesToPaise('.')).toThrow();
+    expect(() => parseRupeesToPaise('-')).toThrow();
   });
 
   it('formats paise with two decimals and grouping', () => {

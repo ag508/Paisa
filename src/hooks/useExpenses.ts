@@ -6,7 +6,7 @@ import {
   newIdempotencyKey,
   resetAll,
 } from '../api/client';
-import type { CreateExpenseInput, ListExpensesQuery } from '../lib/types';
+import type { CreateExpenseInput, Expense, ListExpensesQuery } from '../lib/types';
 
 const EXPENSES_KEY = ['expenses'] as const;
 
@@ -38,7 +38,33 @@ export function useDeleteExpense() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => deleteExpense(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: EXPENSES_KEY }),
+
+    // Optimistic delete: remove the row from every cached list immediately,
+    // then roll back if the network call fails. This keeps the UI snappy
+    // under simulated latency without sacrificing correctness — the real
+    // source of truth (IndexedDB) is reconciled in onSettled.
+    onMutate: async (id: string) => {
+      await qc.cancelQueries({ queryKey: EXPENSES_KEY });
+      const snapshots = qc.getQueriesData<Expense[]>({ queryKey: EXPENSES_KEY });
+      for (const [key, data] of snapshots) {
+        if (data) {
+          qc.setQueryData<Expense[]>(
+            key,
+            data.filter((e) => e.id !== id),
+          );
+        }
+      }
+      return { snapshots };
+    },
+    onError: (_err, _id, ctx) => {
+      if (!ctx) return;
+      for (const [key, data] of ctx.snapshots) {
+        qc.setQueryData(key, data);
+      }
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: EXPENSES_KEY });
+    },
   });
 }
 

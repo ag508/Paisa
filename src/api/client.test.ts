@@ -90,6 +90,62 @@ describe('createExpense idempotency', () => {
       }),
     ).rejects.toBeInstanceOf(ApiError);
   });
+
+  it('rejects the same key used for a different body (409)', async () => {
+    const key = 'reused';
+    await createExpense(body, {
+      idempotencyKey: key,
+      database: db,
+      skipNetwork: true,
+    });
+    const err = await createExpense(
+      { ...body, amount: body.amount + 1 },
+      { idempotencyKey: key, database: db, skipNetwork: true },
+    ).catch((e) => e);
+    expect(err).toBeInstanceOf(ApiError);
+    expect((err as ApiError).status).toBe(409);
+    // Original record preserved.
+    expect(await db.expenses.count()).toBe(1);
+  });
+});
+
+describe('input guardrails', () => {
+  const base = {
+    amount: 1000,
+    category: 'Food' as const,
+    description: 'x',
+    date: '2026-04-22',
+  };
+  function call(db: PaisaDB, overrides: Partial<typeof base>) {
+    return createExpense(
+      { ...base, ...overrides },
+      { idempotencyKey: Math.random().toString(), database: db, skipNetwork: true },
+    );
+  }
+
+  it('rejects future-dated entries', async () => {
+    const db = makeDb();
+    const tenYearsOut = new Date(Date.now() + 10 * 365 * 86_400_000)
+      .toISOString()
+      .slice(0, 10);
+    await expect(call(db, { date: tenYearsOut })).rejects.toBeInstanceOf(
+      ApiError,
+    );
+  });
+
+  it('rejects implausibly old dates', async () => {
+    const db = makeDb();
+    await expect(call(db, { date: '1900-01-01' })).rejects.toBeInstanceOf(
+      ApiError,
+    );
+  });
+
+  it('rejects amounts beyond the per-entry cap', async () => {
+    const db = makeDb();
+    await expect(
+      call(db, { amount: 999_999_999_999 }),
+    ).rejects.toBeInstanceOf(ApiError);
+  });
 });
 
 describe('deleteExpense', () => {

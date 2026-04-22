@@ -76,6 +76,11 @@ or after the user edits the form.
 idempotency row pointing at the deleted id, so a retried POST with an old key
 cannot resurrect a ghost reference, it will correctly create a fresh record.
 
+A key **reused with a different body** returns `409` rather than silently
+replaying the old response. Same key + same body is a retry; same key +
+different body is almost certainly a client bug, and failing loudly is
+the right call. (This is the Stripe idempotency contract.)
+
 ### Simulated network
 
 A `NetworkPanel` in the UI exposes `latencyMs` and `failureRate`. This is the
@@ -119,6 +124,11 @@ cannot occur.
 | Reset data                              | Both `expenses` and `idempotency` tables cleared atomically |
 | Bad input (negative, missing date, etc.)| Zod validation → `ApiError(422)` with issues            |
 | Amount precision                        | Integer paise end-to-end                                |
+| Amount overflow                         | Per-entry cap at ₹10 crore, >5 orders of magnitude below `MAX_SAFE_INTEGER` |
+| Future-dated entry                      | Server-side rejection, client-side date picker disables future dates |
+| Typo date (e.g. 1900-01-01)             | Server rejects dates before 1970-01-01                 |
+| Idempotency-Key reused with new body    | `ApiError(409)` instead of silent replay               |
+| Slow delete under latency               | Optimistic removal from UI, rolled back if server rejects |
 
 ---
 
@@ -143,6 +153,24 @@ cannot occur.
   a POST retry with an old key would "succeed" against an expense id that no
   longer exists. One extra line in the Dexie transaction, but it keeps the
   invariant "every idempotency row points at a live record".
+- **Idempotency-Key conflicts are loud, not silent.** When a key is reused
+  with a matching body, we replay; when it's reused with a *different* body,
+  we return 409. Silent replay of a different request would hide real client
+  bugs (e.g. "I changed the amount and tapped submit again with the same
+  in-flight key"). The extra body-compare inside the transaction is cheap.
+- **Optimistic delete with rollback.** Under the simulated ~250 ms latency a
+  non-optimistic delete feels sluggish. The `useDeleteExpense` hook snapshots
+  every cached list, removes the row immediately, and restores the snapshot
+  on error. `onSettled` re-invalidates so the UI always reconciles with
+  IndexedDB.
+- **Guardrails at the API boundary, not just the form.** Per-entry amount
+  cap (₹10 crore), date floor (1970-01-01), and future-date rejection live
+  inside the Zod schema that the API enforces, not just the form. A bad
+  client (or a replayed request) cannot bypass them.
+- **Filtered reads use the `category` index.** `listExpenses` uses
+  `where('category').equals(c)` rather than loading the full table and
+  filtering in JS. At personal scale this is irrelevant; what matters is
+  that the schema and the query stay truthful to each other.
 - **Two-step reset.** A full wipe is one click too cheap; the header button
   expands inline into `Cancel / Yes, erase`. Same pattern you'd want against
   a real API, where the destructive call is routed through a confirmation.
